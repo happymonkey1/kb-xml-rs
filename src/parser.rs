@@ -1,34 +1,6 @@
+use crate::document::XmlDocument;
 use crate::error::{ParseError, Result};
-
-// TODO: support attributes
-#[derive(Clone, Debug)]
-pub enum XmlNode {
-    TagOpen { name: String, namespace: Option<String>, },
-    TagClose { name: String, namespace: Option<String> },
-    TagOpenAndClose { name: String, namespace: Option<String>, },
-
-    Content(String),
-}
-
-impl XmlNode {
-
-    pub fn new_tag_open(name: String, namespace: Option<String>) -> Self {
-        Self::TagOpen { name, namespace }
-    }
-
-    pub fn new_tag_close(name: String, namespace: Option<String>) -> Self {
-        Self::TagClose { name, namespace }
-    }
-
-    pub fn new_tag_open_and_close(name: String, namespace: Option<String>) -> Self {
-        Self::TagOpenAndClose { name, namespace }
-    }
-
-    pub fn new_content(data: String) -> Self {
-        Self::Content(data)
-    }
-
-}
+use crate::node::XmlNode;
 
 enum Token {
     Space,
@@ -57,19 +29,6 @@ enum State {
     TagBegin,
     TagName,
     TagEnd,
-}
-
-#[derive(Default)]
-pub struct XmlDocument {
-    nodes: Vec<XmlNode>,
-}
-
-impl XmlDocument {
-    pub fn new() -> Self {
-        Self {
-            nodes: Vec::<XmlNode>::new(),
-        }
-    }
 }
 
 pub struct KbXmlParser {
@@ -113,7 +72,7 @@ impl KbXmlParser {
                         if !trimmed_buffer.is_empty() {
                             self.push_node(XmlNode::new_content(trimmed_buffer.to_string()))
                         }
-                        
+
                         self.tag_name = String::new();
                         self.is_closing = false;
 
@@ -200,7 +159,7 @@ impl KbXmlParser {
     }
 
     fn push_node(&mut self, xml_node: XmlNode) {
-        self.document.nodes.push(xml_node);
+        self.document.push_node(xml_node);
     }
 }
 
@@ -219,9 +178,9 @@ mod tests {
         assert!(doc.is_ok());
 
         let doc = doc.unwrap();
-        assert_eq!(doc.nodes.len(), 3);
+        assert_eq!(doc.len(), 3);
 
-        let open_node = doc.nodes[0].clone();
+        let open_node = doc.get_node_at(0).cloned().unwrap();
         let expected_open_node_name = String::from("hello");
         assert!(matches!(open_node, XmlNode::TagOpen { .. }));
         match open_node {
@@ -232,7 +191,7 @@ mod tests {
             other => assert!(false, "Expected XmlNode::TagOpen, found: {other:?}")
         }
 
-        let content_node = doc.nodes[1].clone();
+        let content_node = doc.get_node_at(1).cloned().unwrap();
         let expected_content = "hi".to_string();
         assert!(matches!(content_node, XmlNode::Content { .. }));
         match content_node {
@@ -242,7 +201,7 @@ mod tests {
             other => assert!(false, "Expected XmlNode::Content, found: {other:?}")
         }
 
-        let close_node = doc.nodes[2].clone();
+        let close_node = doc.get_node_at(2).cloned().unwrap();
         let expected_close_node_name = String::from("hello");
         assert!(matches!(close_node, XmlNode::TagClose { .. }));
         match close_node {
@@ -253,30 +212,30 @@ mod tests {
             other => assert!(false, "Expected XmlNode::TagClose, found: {other:?}")
         }
     }
-    
+
     #[test]
     fn when_parse_node_with_namespace_then_succeed() -> Result<()> {
         let data = "<kb:hello></kb:hello>";
-        
+
         let mut parser = KbXmlParser::new();
         let doc = parser.parse(data.to_string())?;
-        
-        
-        let open_node = doc.nodes[0].clone();
+
+
+        let open_node = doc.get_node_at(0).cloned().unwrap();
         let expected_tag_name = "hello".to_string();
         let expected_tag_namespace = "kb".to_string();
-        
+
         match open_node {
             XmlNode::TagOpen { name, namespace } => {
                 assert_eq!(name, expected_tag_name);
-                
+
                 assert!(namespace.is_some(), "Namespace can not be empty");
                 assert_eq!(namespace.unwrap(), expected_tag_namespace);
             }
             other => assert!(false, "Expected XmlNode::TagOpen, found: {other:?}")
         }
-        
-        let close_node = doc.nodes[1].clone();
+
+        let close_node = doc.get_node_at(1).cloned().unwrap();
         match close_node {
             XmlNode::TagClose { name, namespace } => {
                 assert_eq!(name, expected_tag_name);
@@ -286,7 +245,7 @@ mod tests {
             }
             other => assert!(false, "Expected XmlNode::TagClose, found: {other:?}")
         }
-        
+
         Ok(())
     }
 
