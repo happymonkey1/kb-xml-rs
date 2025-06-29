@@ -66,7 +66,6 @@ pub struct XmlDocument {
 
 impl XmlDocument {
     pub fn new() -> Self {
-
         Self {
             nodes: Vec::<XmlNode>::new(),
         }
@@ -96,7 +95,6 @@ impl KbXmlParser {
     }
 
     pub fn parse(&mut self, data: String) -> Result<XmlDocument> {
-
         for ch in data.chars() {
             self.step(ch)?
         }
@@ -111,6 +109,11 @@ impl KbXmlParser {
             State::Data =>
                 match tok {
                     Token::LessThan => {
+                        let trimmed_buffer  = self.data_buffer.trim();
+                        if !trimmed_buffer.is_empty() {
+                            self.push_node(XmlNode::new_content(trimmed_buffer.to_string()))
+                        }
+                        
                         self.tag_name = String::new();
                         self.is_closing = false;
 
@@ -204,6 +207,7 @@ impl KbXmlParser {
 #[cfg(test)]
 mod tests {
     use crate::parser::{KbXmlParser, XmlNode};
+    use crate::error::{Result};
 
     #[test]
     fn when_parse_single_tag_then_succeed() {
@@ -215,7 +219,7 @@ mod tests {
         assert!(doc.is_ok());
 
         let doc = doc.unwrap();
-        assert_eq!(doc.nodes.len(), 2);
+        assert_eq!(doc.nodes.len(), 3);
 
         let open_node = doc.nodes[0].clone();
         let expected_open_node_name = String::from("hello");
@@ -228,7 +232,17 @@ mod tests {
             other => assert!(false, "Expected XmlNode::TagOpen, found: {other:?}")
         }
 
-        let close_node = doc.nodes[1].clone();
+        let content_node = doc.nodes[1].clone();
+        let expected_content = "hi".to_string();
+        assert!(matches!(content_node, XmlNode::Content { .. }));
+        match content_node {
+            XmlNode::Content(data) => {
+                assert_eq!(data, expected_content);
+            }
+            other => assert!(false, "Expected XmlNode::Content, found: {other:?}")
+        }
+
+        let close_node = doc.nodes[2].clone();
         let expected_close_node_name = String::from("hello");
         assert!(matches!(close_node, XmlNode::TagClose { .. }));
         match close_node {
@@ -238,7 +252,42 @@ mod tests {
             }
             other => assert!(false, "Expected XmlNode::TagClose, found: {other:?}")
         }
+    }
+    
+    #[test]
+    fn when_parse_node_with_namespace_then_succeed() -> Result<()> {
+        let data = "<kb:hello></kb:hello>";
         
+        let mut parser = KbXmlParser::new();
+        let doc = parser.parse(data.to_string())?;
+        
+        
+        let open_node = doc.nodes[0].clone();
+        let expected_tag_name = "hello".to_string();
+        let expected_tag_namespace = "kb".to_string();
+        
+        match open_node {
+            XmlNode::TagOpen { name, namespace } => {
+                assert_eq!(name, expected_tag_name);
+                
+                assert!(namespace.is_some(), "Namespace can not be empty");
+                assert_eq!(namespace.unwrap(), expected_tag_namespace);
+            }
+            other => assert!(false, "Expected XmlNode::TagOpen, found: {other:?}")
+        }
+        
+        let close_node = doc.nodes[1].clone();
+        match close_node {
+            XmlNode::TagClose { name, namespace } => {
+                assert_eq!(name, expected_tag_name);
+
+                assert!(namespace.is_some(), "Namespace can not be empty");
+                assert_eq!(namespace.unwrap(), expected_tag_namespace);
+            }
+            other => assert!(false, "Expected XmlNode::TagClose, found: {other:?}")
+        }
+        
+        Ok(())
     }
 
 }
