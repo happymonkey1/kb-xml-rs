@@ -12,7 +12,7 @@ let doc = XmlDocument::parse(r#"
     </book>
 "#);
 
-let root_node = doc.root
+let root_node = doc.root()
     .expect("Root node is valid")
     .as_element()
     .expect("Root node is element");

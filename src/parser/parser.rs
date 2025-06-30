@@ -142,6 +142,8 @@ impl KbXmlParser {
                         self.tag_name = String::new();
                         self.is_closing = false;
                         self.is_self_closing = false;
+                        self.is_comment = false;
+                        self.is_declaration = false;
                         self.hyphen_count = 0;
 
                         ParserState::TagBegin
@@ -483,7 +485,10 @@ impl KbXmlParser {
             // TODO: actual consume and produce a node?
             ParserState::DeclarationBegin =>
                 match tok {
-                    _ => ParserState::Declaration,
+                    _ => {
+                        self.is_declaration = true;
+                        ParserState::Declaration
+                    },
                 }
             // TODO: actual consume and produce a node?
             ParserState::Declaration =>
