@@ -233,4 +233,11 @@ mod tests {
         Ok(())
     }
     
+    #[test]
+    fn when_parse_sample_file_then_succeed() -> Result<()> {
+        XmlDocument::parse(include_str!("../resources/book.xml"))?;
+        
+        Ok(())
+    }
+    
 }
