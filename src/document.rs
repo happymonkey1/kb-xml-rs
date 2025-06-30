@@ -31,11 +31,40 @@ impl XmlDocument {
     pub fn root_mut(&mut self) -> Option<&mut XmlNode> {
         self.root.as_mut()
     }
+
+    pub fn iter(&self) -> XmlNodeIter<'_> {
+        let mut stack = Vec::new();
+        if let Some(root) = &self.root {
+            stack.push(root);
+        }
+
+        XmlNodeIter { stack }
+    }
 }
+
+pub struct XmlNodeIter<'a> {
+    stack: Vec<&'a XmlNode>,
+}
+
+impl<'a> Iterator for XmlNodeIter<'a> {
+    type Item = &'a XmlNode;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let node = self.stack.pop()?;
+        if let XmlNode::Element(el) = node {
+            for child in el.children().iter().rev() {
+                self.stack.push(child)
+            }
+        }
+
+        Some(node)
+    }
+}
+
 
 impl TryFrom<LexedXmlDocument> for XmlDocument {
     type Error = ParseError;
-    
+
     fn try_from(value: LexedXmlDocument) -> Result<Self, Self::Error> {
         if value.len() == 0 {
             return Ok(XmlDocument::new());
@@ -61,7 +90,7 @@ impl TryFrom<LexedXmlDocument> for XmlDocument {
                         return Err(ParseError::UnexpectedRoot);
                     }
                 }
-                
+
                 LexedXmlNode::Attribute { key, value } => {
                     if let Some(parent) = stack.last_mut() {
                         let value = if let Some(value) = value {
@@ -69,7 +98,7 @@ impl TryFrom<LexedXmlDocument> for XmlDocument {
                         } else {
                             String::new()
                         };
-                        
+
                         parent.set_attr(key, value);
                     } else {
                         return Err(ParseError::InvalidParent)
@@ -105,7 +134,7 @@ impl TryFrom<LexedXmlDocument> for XmlDocument {
                         return Err(ParseError::UnexpectedRoot);
                     }
                 }
-                
+
                 LexedXmlNode::Comment(_comment) => {
                     // TODO: option to keep comment(s) in the document tree
                     /* no-op */
@@ -126,7 +155,7 @@ impl TryFrom<LexedXmlDocument> for XmlDocument {
 mod tests {
     use crate::document::XmlDocument;
     use crate::error::{ParseError, Result};
-    use crate::node::XmlNode;
+    use crate::node::{XmlElement, XmlNode};
 
     #[test]
     fn when_parse_basic_document_then_succeed() -> Result<()> {
@@ -136,9 +165,9 @@ mod tests {
                 <author>happymonkey1</author>
             </book>
         "#)?;
-        
+
         assert!(doc.root.is_some(), "Root node is not parsed");
-        
+
         let root_node = doc.root.unwrap();
         match &root_node {
             XmlNode::Element(element) => {
@@ -148,7 +177,7 @@ mod tests {
             }
             other_node => assert!(false, "Unexpected root node: {other_node:?}")
         }
-        
+
         let root_children = match &root_node {
             XmlNode::Element(element) => {
                 element.children()
@@ -165,7 +194,7 @@ mod tests {
             "Expected root to have 2 children, found {} instead",
             root_children.len(),
         );
-        
+
         let first_child_node = &root_children[0];
         let first_child_element = match first_child_node {
             XmlNode::Element(element) => {
@@ -201,7 +230,7 @@ mod tests {
                 return Err(ParseError::InvalidDocumentError)
             }
         };
-        
+
         assert_eq!(second_child_element.children().len(), 1);
         let author_child_node = second_child_element.children().first().expect("Author has child");
         match author_child_node {
@@ -211,8 +240,8 @@ mod tests {
             other_node =>
                 assert!(false, "Unexpected node while checking author children: {other_node:?}")
         }
-        
-        
+
+
         Ok(())
     }
 
@@ -238,12 +267,30 @@ mod tests {
 
         Ok(())
     }
-    
+
     #[test]
     fn when_parse_sample_file_then_succeed() -> Result<()> {
-        XmlDocument::parse(include_str!("../resources/book.xml"))?;
+        let doc = XmlDocument::parse(include_str!("../resources/book.xml"))?;
+
+        let books = doc.iter()
+            .filter_map(|node| {
+                match node {
+                    XmlNode::Element(element) => {
+                        if element.name().as_str() == "book" {
+                            Some(element)
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None
+                }
+            })
+            .collect::<Vec<&XmlElement>>();
         
+        let books_count = books.len();
+        assert_eq!(books_count, 12, "Expected 12 books, found {books_count} instead");
+
         Ok(())
     }
-    
+
 }
