@@ -329,7 +329,7 @@ impl KbXmlParser {
                 match tok {
                     Token::Char => {
                         // TODO: should we transition to parsing value instead of error?
-                        return Err(ParseError::SyntaxError)
+                        return Err(ParseError::InvalidDocumentError)
                     }
                     Token::Space => self.noop_state_transition(),
                     Token::Quote => {

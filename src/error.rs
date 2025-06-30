@@ -8,12 +8,8 @@ pub enum ParseError {
     UnexpectedCharacterError(char),
     #[error("unexpected token: {0:?}")]
     UnexpectedToken(ParserState, Token),
-    #[error("syntax error")]
-    SyntaxError,
     #[error("invalid xml document")]
     InvalidDocumentError,
-    #[error("failed to parser comment (hyphen count: {0})")]
-    InternalCommentParseError(usize),
     #[error("unexpected root node")]
     UnexpectedRoot,
     #[error("unexpected content outside of root node")]
@@ -23,7 +19,7 @@ pub enum ParseError {
     #[error("mismatched tags (expected {expected:?}, found {found:?}")]
     TagMismatch { expected: (String, Option<String>), found: (String, Option<String>) },
     #[error("unclosed tags: {0:?}")]
-    UnclosedTags(Vec::<String>),
+    UnclosedTags(Vec<String>),
     #[error("parsed empty xml document")]
     EmptyDocument,
     #[error("parent not found")]
