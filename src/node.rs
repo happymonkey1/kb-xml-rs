@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum XmlNode {
     Element(XmlElement),
     Text(String),
@@ -8,7 +8,7 @@ pub enum XmlNode {
     CData(String),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct XmlElement {
     name: String,
     namespace: Option<String>,
@@ -108,6 +108,10 @@ impl XmlElement {
 
     pub fn children_mut(&mut self) -> &mut [XmlNode] {
         self.children.as_mut_slice()
+    }
+    
+    pub fn take_children(&mut self) -> Vec<XmlNode> {
+        std::mem::take(&mut self.children)
     }
 
     pub fn elements(&self) -> impl Iterator<Item = &XmlElement> {

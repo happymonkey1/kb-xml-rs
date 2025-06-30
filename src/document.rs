@@ -5,6 +5,7 @@ use crate::parser::document::LexedXmlDocument;
 use crate::parser::node::LexedXmlNode;
 use crate::parser::parser::KbXmlParser;
 
+#[derive(Debug)]
 pub struct XmlDocument {
     root: Option<XmlNode>,
 }
@@ -32,6 +33,7 @@ impl XmlDocument {
         self.root.as_mut()
     }
 
+    /// Recursive decent iterator over all nodes in the document
     pub fn iter(&self) -> XmlNodeIter<'_> {
         let mut stack = Vec::new();
         if let Some(root) = &self.root {
@@ -41,26 +43,6 @@ impl XmlDocument {
         XmlNodeIter { stack }
     }
 }
-
-pub struct XmlNodeIter<'a> {
-    stack: Vec<&'a XmlNode>,
-}
-
-impl<'a> Iterator for XmlNodeIter<'a> {
-    type Item = &'a XmlNode;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let node = self.stack.pop()?;
-        if let XmlNode::Element(el) = node {
-            for child in el.children().iter().rev() {
-                self.stack.push(child)
-            }
-        }
-
-        Some(node)
-    }
-}
-
 
 impl TryFrom<LexedXmlDocument> for XmlDocument {
     type Error = ParseError;
@@ -148,6 +130,61 @@ impl TryFrom<LexedXmlDocument> for XmlDocument {
 
         let root_node = XmlNode::Element(root.ok_or(ParseError::EmptyDocument)?);
         Ok(XmlDocument::new_from_root(root_node))
+    }
+}
+
+pub struct XmlNodeIter<'a> {
+    stack: Vec<&'a XmlNode>,
+}
+
+impl<'a> Iterator for XmlNodeIter<'a> {
+    type Item = &'a XmlNode;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let node = self.stack.pop()?;
+        if let XmlNode::Element(el) = node {
+            for child in el.children().iter().rev() {
+                self.stack.push(child)
+            }
+        }
+
+        Some(node)
+    }
+}
+
+pub struct XmlNodeIntoIter {
+    stack: Vec<XmlNode>
+}
+
+impl <'a> Iterator for XmlNodeIntoIter {
+    type Item = XmlNode;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let node = self.stack.pop()?;
+        if let XmlNode::Element(el) = node {
+            // Copying here so each element still has reference to its children
+            let mut children = el.children().to_vec();
+            children.reverse();
+            self.stack.extend(children);
+
+            Some(XmlNode::Element(el))
+        } else {
+            Some(node)
+        }
+    }
+}
+
+impl IntoIterator for XmlDocument {
+    type Item = XmlNode;
+    type IntoIter = XmlNodeIntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let stack = match self.root {
+            Some(root) => vec![root],
+            None => vec![],
+        };
+        
+        XmlNodeIntoIter { stack }
     }
 }
 
@@ -286,7 +323,7 @@ mod tests {
                 }
             })
             .collect::<Vec<&XmlElement>>();
-        
+
         let books_count = books.len();
         assert_eq!(books_count, 12, "Expected 12 books, found {books_count} instead");
 
