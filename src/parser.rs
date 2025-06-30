@@ -70,7 +70,9 @@ impl KbXmlParser {
                     Token::LessThan => {
                         let trimmed_buffer  = self.data_buffer.trim();
                         if !trimmed_buffer.is_empty() {
-                            self.push_node(XmlNode::new_content(trimmed_buffer.to_string()))
+                            self.push_node(XmlNode::new_content(trimmed_buffer.to_string()));
+                            
+                            self.data_buffer = String::new();
                         }
 
                         self.tag_name = String::new();
@@ -168,6 +170,15 @@ mod tests {
     use crate::parser::{KbXmlParser, XmlNode};
     use crate::error::{Result};
 
+    macro_rules! assert_xml_node {
+        ($node:expr, $pat:pat => $body:block) => {
+            match $node {
+                $pat => $body,
+                other => panic!("Expected {}, found: {other:?}", stringify!($pat)),
+            }
+        };
+    }
+
     #[test]
     fn when_parse_single_tag_then_succeed() {
         let data = "<hello>hi</hello>";
@@ -246,6 +257,50 @@ mod tests {
             other => assert!(false, "Expected XmlNode::TagClose, found: {other:?}")
         }
 
+        Ok(())
+    }
+    
+    #[test]
+    fn when_parse_nested_tags_then_succeed() -> Result<()> {
+        let data = "<hello>Hello<world>World</world></hello>".to_string();
+        let mut parser = KbXmlParser::new();
+        let doc = parser.parse(data)?;
+        
+        assert_eq!(doc.len(), 6, "Expected 6 nodes, found {} instead. Document={:?}", doc.len(), doc);
+        let first_node = doc.get_node_at(0).expect("First node is valid");
+        assert_xml_node!(first_node, XmlNode::TagOpen { name, namespace } => {
+            assert_eq!(name, &"hello".to_string());
+            assert!(namespace.is_none(), "Namespace should be empty") 
+        });
+        
+        let second_node = doc.get_node_at(1).expect("Second node is valid");
+        assert_xml_node!(second_node, XmlNode::Content(data) => {
+            assert_eq!(data, &"Hello".to_string()) 
+        });
+
+        let third_node = doc.get_node_at(2).expect("Third node is valid");
+        assert_xml_node!(third_node, XmlNode::TagOpen { name, namespace } => {
+            assert_eq!(name, &"world".to_string());
+            assert!(namespace.is_none(), "Namespace should be empty") 
+        });
+
+        let fourth_node = doc.get_node_at(3).expect("Fourth node is valid");
+        assert_xml_node!(fourth_node, XmlNode::Content(data) => {
+            assert_eq!(data, &"World".to_string()) 
+        });
+
+        let fifth_node = doc.get_node_at(4).expect("Fifth node is valid");
+        assert_xml_node!(fifth_node, XmlNode::TagClose { name, namespace } => {
+            assert_eq!(name, &"world".to_string());
+            assert!(namespace.is_none(), "Namespace should be empty") 
+        });
+
+        let sixth_node = doc.get_node_at(5).expect("Sixth node is valid");
+        assert_xml_node!(sixth_node, XmlNode::TagClose { name, namespace } => {
+            assert_eq!(name, &"hello".to_string());
+            assert!(namespace.is_none(), "Namespace should be empty") 
+        });
+        
         Ok(())
     }
 

@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum ParseError {
     #[error("invalid state transition")]
     InvalidStateError,

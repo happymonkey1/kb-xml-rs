@@ -1,6 +1,6 @@
 use crate::node::XmlNode;
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct XmlDocument {
     nodes: Vec<XmlNode>,
 }
