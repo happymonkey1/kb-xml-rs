@@ -8,6 +8,8 @@ pub enum LexedXmlNode {
     Attribute { key: String, value: Option<String> },
     
     Content(String),
+    
+    Comment(String),
 }
 
 impl LexedXmlNode {
@@ -39,6 +41,7 @@ impl LexedXmlNode {
             LexedXmlNode::TagSelfClosing { name, .. } => Some(name),
             LexedXmlNode::Attribute { ..} => None,
             LexedXmlNode::Content(_) => None,
+            LexedXmlNode::Comment(_) => None,
         }
     }
 
@@ -49,6 +52,7 @@ impl LexedXmlNode {
             LexedXmlNode::TagSelfClosing { namespace, .. } => namespace.is_some(),
             LexedXmlNode::Attribute { .. } => false,
             LexedXmlNode::Content(_) => false,
+            LexedXmlNode::Comment(_) => false,
         }
     }
 
@@ -59,6 +63,7 @@ impl LexedXmlNode {
             LexedXmlNode::TagSelfClosing { namespace, .. } => namespace.as_ref(),
             LexedXmlNode::Attribute { .. } => None,
             LexedXmlNode::Content(_) => None,
+            LexedXmlNode::Comment(_) => None,
         }
     }
     

@@ -6,7 +6,7 @@ use crate::parser::node::LexedXmlNode;
 use crate::parser::parser::KbXmlParser;
 
 pub struct XmlDocument {
-    root: Option<XmlNode>
+    root: Option<XmlNode>,
 }
 
 impl XmlDocument {
@@ -80,6 +80,7 @@ impl TryFrom<LexedXmlDocument> for XmlDocument {
                     if let Some(parent) = stack.last_mut() {
                         parent.add_text(&text);
                     } else {
+                        debug_assert!(false, "Content outside of root in document: text='{text}'");
                         return Err(ParseError::ContentOutsideRoot);
                     }
                 }
@@ -103,6 +104,11 @@ impl TryFrom<LexedXmlDocument> for XmlDocument {
                     } else {
                         return Err(ParseError::UnexpectedRoot);
                     }
+                }
+                
+                LexedXmlNode::Comment(_comment) => {
+                    // TODO: option to keep comment(s) in the document tree
+                    /* no-op */
                 }
             }
         }

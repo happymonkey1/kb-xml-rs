@@ -7,11 +7,13 @@ pub enum ParseError {
     #[error("unexpected character: {0}")]
     UnexpectedCharacterError(char),
     #[error("unexpected token: {0:?}")]
-    UnexpectedToken(Token),
+    UnexpectedToken(ParserState, Token),
     #[error("syntax error")]
     SyntaxError,
     #[error("invalid xml document")]
     InvalidDocumentError,
+    #[error("failed to parser comment (hyphen count: {0})")]
+    InternalCommentParseError(usize),
     #[error("unexpected root node")]
     UnexpectedRoot,
     #[error("unexpected content outside of root node")]

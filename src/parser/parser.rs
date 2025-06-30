@@ -12,6 +12,9 @@ pub enum Token {
     Char,
     Equal,
     Quote,
+    Question,
+    Exclamation,
+    Hyphen,
 }
 
 impl Token {
@@ -24,6 +27,9 @@ impl Token {
             ':' => Token::Colon,
             '=' => Token::Equal,
             '\'' | '\"' => Token::Quote,
+            '!' => Token::Exclamation,
+            '?' => Token::Question,
+            '-' => Token::Hyphen,
             _ => Token::Char,
         }
     }
@@ -42,6 +48,14 @@ pub enum ParserState {
 
     AttributeValueBegin,
     AttributeValue,
+
+    CommentBegin,
+    Comment,
+    CommentEnd,
+
+    DeclarationBegin,
+    Declaration,
+    DeclarationEnd,
 }
 
 pub struct KbXmlParser {
@@ -55,6 +69,10 @@ pub struct KbXmlParser {
     attribute_value: String,
     is_closing: bool,
     is_self_closing: bool,
+    is_comment: bool,
+    /// Handles flag for whether we are parsing an XML declaration tag
+    is_declaration: bool,
+    hyphen_count: usize,
     open_quote: Option<QuoteChar>,
     document: LexedXmlDocument,
 }
@@ -90,6 +108,9 @@ impl KbXmlParser {
             attribute_value: String::new(),
             is_closing: false,
             is_self_closing: false,
+            is_declaration: false,
+            is_comment: false,
+            hyphen_count: 0,
             open_quote: None,
             document: LexedXmlDocument::new(),
         }
@@ -121,6 +142,7 @@ impl KbXmlParser {
                         self.tag_name = String::new();
                         self.is_closing = false;
                         self.is_self_closing = false;
+                        self.hyphen_count = 0;
 
                         ParserState::TagBegin
                     }
@@ -143,7 +165,9 @@ impl KbXmlParser {
 
                         ParserState::TagBegin
                     }
-                    _ => return Err(ParseError::UnexpectedToken(tok)),
+                    Token::Exclamation => ParserState::CommentBegin,
+                    Token::Question => ParserState::Declaration,
+                    _ => return Err(ParseError::UnexpectedToken(self.current_state, tok)),
                 }
             ParserState::TagName =>
                 match tok {
@@ -201,7 +225,7 @@ impl KbXmlParser {
 
                         ParserState::Data
                     }
-                    _ => return Err(ParseError::UnexpectedToken(tok)),
+                    _ => return Err(ParseError::UnexpectedToken(self.current_state, tok)),
                 }
             ParserState::TagEnd =>
                 match tok {
@@ -222,12 +246,13 @@ impl KbXmlParser {
                         if self.is_self_closing {
                             self.noop_state_transition()
                         } else {
-                            return Err(ParseError::UnexpectedToken(tok))
+                            return Err(ParseError::UnexpectedToken(self.current_state, tok))
                         }
                     }
                     Token::Char => self.noop_state_transition(),
-                    _ => return Err(ParseError::UnexpectedToken(tok)),
+                    _ => return Err(ParseError::UnexpectedToken(self.current_state, tok)),
                 }
+
             ParserState::AttributeNameBegin =>
                 match tok {
                     Token::Char => {
@@ -246,7 +271,7 @@ impl KbXmlParser {
                         self.is_closing = true;
                         ParserState::TagEnd
                     }
-                    _ => return Err(ParseError::UnexpectedToken(tok)),
+                    _ => return Err(ParseError::UnexpectedToken(self.current_state, tok)),
                 }
             ParserState::AttributeName =>
                 match tok {
@@ -275,7 +300,7 @@ impl KbXmlParser {
 
                         ParserState::TagEnd
                     }
-                    _ => return Err(ParseError::UnexpectedToken(tok)),
+                    _ => return Err(ParseError::UnexpectedToken(self.current_state, tok)),
                 }
             ParserState::AttributeNameEnd =>
                 match tok {
@@ -295,8 +320,9 @@ impl KbXmlParser {
                         self.data_buffer = String::new();
                         ParserState::Data
                     }
-                    _ => return Err(ParseError::UnexpectedToken(tok)),
+                    _ => return Err(ParseError::UnexpectedToken(self.current_state, tok)),
                 }
+
             ParserState::AttributeValueBegin =>
                 match tok {
                     Token::Char => {
@@ -317,7 +343,7 @@ impl KbXmlParser {
 
                         ParserState::Data
                     }
-                    _ => return Err(ParseError::UnexpectedToken(tok)),
+                    _ => return Err(ParseError::UnexpectedToken(self.current_state, tok)),
                 }
             ParserState::AttributeValue =>
                 match tok {
@@ -332,7 +358,7 @@ impl KbXmlParser {
 
                             ParserState::AttributeValue
                         } else {
-                            return Err(ParseError::UnexpectedToken(tok))
+                            return Err(ParseError::UnexpectedToken(self.current_state, tok))
                         }
                     }
                     Token::Space => {
@@ -384,7 +410,96 @@ impl KbXmlParser {
                             ParserState::TagEnd
                         }
                     }
-                    tok => return Err(ParseError::UnexpectedToken(tok))
+                    tok => return Err(ParseError::UnexpectedToken(self.current_state, tok))
+                }
+
+            ParserState::CommentBegin =>
+                match tok {
+                    Token::Hyphen => {
+                        self.hyphen_count += 1;
+                        if self.hyphen_count == 2 {
+                            self.hyphen_count = 0;
+
+                            ParserState::Comment
+                        } else {
+                            self.noop_state_transition()
+                        }
+                    },
+                    Token::Space => self.noop_state_transition(),
+                    Token::GreaterThan => {
+                        if self.is_comment {
+                            self.data_buffer.push(ch);
+                            self.noop_state_transition()
+                        } else {
+                            return Err(ParseError::UnexpectedToken(self.current_state, tok))
+                        }
+                    }
+                    unexpected => return Err(ParseError::UnexpectedToken(self.current_state, unexpected))
+                }
+            ParserState::Comment =>
+                match tok {
+                    Token::Hyphen => {
+                        self.hyphen_count += 1;
+                        match self.peek_token() {
+                            Some(Token::Hyphen) => ParserState::CommentEnd,
+                            Some(_) => {
+                                self.data_buffer.push(ch);
+                                ParserState::Comment
+                            }
+                            None => return Err(ParseError::InvalidDocumentError)
+                        }
+                    }
+                    _ => {
+                        self.data_buffer.push(ch);
+                        self.noop_state_transition()
+                    }
+                }
+            ParserState::CommentEnd =>
+                match tok {
+                    Token::GreaterThan => {
+                        self.push_comment_node();
+                        ParserState::Data
+                    }
+                    Token::Hyphen => {
+                        match self.peek_token() {
+                            Some(Token::GreaterThan) => {
+                                ParserState::CommentEnd
+                            }
+                            Some(_) => {
+                                self.data_buffer.push_str("--");
+                                ParserState::Comment
+                            }
+                            None => return Err(ParseError::InvalidDocumentError)
+                        }
+                    }
+                    _ => {
+                        self.hyphen_count = 0;
+                        self.data_buffer.push(ch);
+                        self.noop_state_transition()
+                    }
+                }
+
+
+            // TODO: actual consume and produce a node?
+            ParserState::DeclarationBegin =>
+                match tok {
+                    _ => ParserState::Declaration,
+                }
+            // TODO: actual consume and produce a node?
+            ParserState::Declaration =>
+                match tok {
+
+                    Token::Question => ParserState::DeclarationEnd,
+                    _ => self.noop_state_transition()
+                }
+            // TODO: actual consume and produce a node?
+            ParserState::DeclarationEnd =>
+                match tok {
+                    Token::GreaterThan => {
+                        self.data_buffer = String::new();
+                        ParserState::Data
+                    },
+                    other_tok => return Err(ParseError::UnexpectedToken(self.current_state, other_tok)),
                 }
         };
 
@@ -420,6 +535,11 @@ impl KbXmlParser {
 
     fn push_node(&mut self, xml_node: LexedXmlNode) {
         self.document.push_node(xml_node);
+    }
+
+    fn push_comment_node(&mut self) {
+        let comment = std::mem::take(&mut self.data_buffer);
+        self.push_node(LexedXmlNode::Comment(comment))
     }
 
     fn push_attribute_node(&mut self) {
@@ -637,7 +757,7 @@ mod tests {
         let doc = parser.parse(data)?;
 
         assert_eq!(doc.len(), 4, "Expected document to have 3 nodes: {doc:?}");
-        
+
         let expected_doc = LexedXmlDocument::from_nodes(
             vec![
                 LexedXmlNode::TagOpen { name: "data".to_string(), namespace: None },
@@ -646,8 +766,68 @@ mod tests {
                 LexedXmlNode::TagClose { name: String::new(), namespace: None },
             ]
         );
-        
+
         assert_eq!(doc, expected_doc);
+
+        Ok(())
+    }
+
+    #[test]
+    fn when_parse_comment_then_succeed() -> Result<()> {
+        let comments = vec![
+            "<!---->",
+            "<!-- -->",
+            "<!--foo-->",
+            "<!-- foo-->",
+            "<!--foo -->",
+            "<!-- foo -->",
+            "<!--  -------------- -- ------ -->",
+            r#"<!--
+                Source: https://learn.microsoft.com/en-us/previous-versions/windows/desktop/ms762271(v=vs.85)
+                Copyright © Microsoft.
+                Used under the Microsoft Docs license (MIT).
+            -->
+            "#
+        ];
+
+        for (index, tag) in comments.iter().enumerate() {
+            let mut parser = KbXmlParser::new();
+            let doc = parser.parse(tag)?;
+
+            assert_eq!(doc.len(), 1, "Expected to find comment node in document (index={index}): {doc:?}");
+
+            let comment_node = doc.get_node_at(0).expect("Valid node in comment document");
+            assert_xml_node!(comment_node, LexedXmlNode::Comment(comment) => {
+                let expected_comment = match index {
+                    0 => "",
+                    1 => " ",
+                    2 => "foo",
+                    3 => " foo",
+                    4 => "foo ",
+                    5 => " foo ",
+                    6 => "  -------------- -- ------ ",
+                    7 => r#"
+                Source: https://learn.microsoft.com/en-us/previous-versions/windows/desktop/ms762271(v=vs.85)
+                Copyright © Microsoft.
+                Used under the Microsoft Docs license (MIT).
+            "#,
+                    _ => panic!("Unexpected comment tag index"),
+                };
+
+                assert_eq!(comment, expected_comment)
+            });
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn when_parse_xml_declaration_then_consume_without_producing_node() -> Result<()> {
+        let data = "<?xml version=\"1.0\"?>";
+        let mut parser = KbXmlParser::new();
+        let doc = parser.parse(data)?;
+
+        assert_eq!(doc.len(), 0);
 
         Ok(())
     }
