@@ -1,4 +1,4 @@
 pub mod error;
-pub mod parser;
+mod parser;
 pub mod node;
 pub mod document;
