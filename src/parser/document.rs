@@ -1,6 +1,7 @@
 use crate::parser::node::LexedXmlNode;
 
 #[derive(Debug, Default)]
+#[derive(PartialEq)]
 pub struct LexedXmlDocument {
     nodes: Vec<LexedXmlNode>,
 }
@@ -10,6 +11,11 @@ impl LexedXmlDocument {
         Self {
             nodes: Vec::<LexedXmlNode>::new(),
         }
+    }
+    
+    #[cfg(test)]
+    pub fn from_nodes(nodes: Vec<LexedXmlNode>) -> Self {
+        Self { nodes }
     }
 
     pub fn iter(&self) -> std::slice::Iter<'_, LexedXmlNode> {

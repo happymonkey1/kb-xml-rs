@@ -138,6 +138,7 @@ impl KbXmlParser {
                     }
                     Token::GreaterThan => self.noop_state_transition(),
                     Token::Slash => {
+                        debug_assert!(!self.is_self_closing, "TabBegin should not be self closing");
                         self.is_closing = true;
 
                         ParserState::TagBegin
@@ -170,7 +171,7 @@ impl KbXmlParser {
                                 }
                                 // Consume space token and continue (we may need to consume more spaces)
                                 Some(Token::Space) => self.noop_state_transition(),
-                                Some(other_tok) => {
+                                Some(_) => {
                                     let (name, namespace) = self.consume_name_and_namespace();
                                     self.push_node(LexedXmlNode::TagOpen { name, namespace });
 
@@ -186,11 +187,11 @@ impl KbXmlParser {
 
                             ParserState::TagEnd
                         } else {
-                            return Err(ParseError::InvalidStateError(self.current_state, tok)) 
+                            return Err(ParseError::InvalidStateError(self.current_state, tok))
                         }
                     }
                     Token::GreaterThan => {
-                        let (name, namespace) = self.consume_name_and_namespace(); 
+                        let (name, namespace) = self.consume_name_and_namespace();
 
                         if self.is_closing {
                             self.push_node(LexedXmlNode::new_tag_close(name, namespace))
@@ -206,7 +207,7 @@ impl KbXmlParser {
                 match tok {
                     Token::GreaterThan => {
                         let (name, namespace) = self.consume_name_and_namespace();
-                        
+
                         if self.is_closing {
                             self.push_node(LexedXmlNode::new_tag_close(name, namespace));
                         } else if self.is_self_closing {
@@ -328,7 +329,7 @@ impl KbXmlParser {
                     Token::Colon => {
                         if self.open_quote.is_some() {
                             self.attribute_value.push(ch);
-                            
+
                             ParserState::AttributeValue
                         } else {
                             return Err(ParseError::UnexpectedToken(tok))
@@ -425,11 +426,11 @@ impl KbXmlParser {
         let (name, value) = self.consume_attribute_buffers();
         self.push_node(LexedXmlNode::new_attribute(name, value));
     }
-    
+
     fn peek_char(&self) -> Option<char> {
         self.peek_buffer
     }
-    
+
     fn peek_token(&self) -> Option<Token> {
         Some(Token::char_to_token(self.peek_char()?))
     }
@@ -438,6 +439,7 @@ impl KbXmlParser {
 #[cfg(test)]
 mod tests {
     use crate::error::Result;
+    use crate::parser::document::LexedXmlDocument;
     use crate::parser::node::LexedXmlNode;
     use crate::parser::parser::KbXmlParser;
 
@@ -574,7 +576,7 @@ mod tests {
 
         Ok(())
     }
-    
+
     #[test]
     fn when_parse_self_closing_tag_then_succeed() -> Result<()> {
         let tags = vec![
@@ -582,7 +584,7 @@ mod tests {
             "<kablunk />",
             "<kablunk                      />",
         ];
-        
+
         for data in tags {
             let mut parser = KbXmlParser::new();
             let doc = parser.parse(data)?;
@@ -595,7 +597,7 @@ mod tests {
                 assert!(namespace.is_none(), "Namespace should be empty");
             });
         }
-        
+
         Ok(())
     }
 
@@ -612,7 +614,7 @@ mod tests {
             assert_eq!(name, "data");
             assert!(namespace.is_none(), "Namespace should be empty")
         });
-        
+
         let second_node = doc.get_node_at(1).expect("Second node valid");
         assert_xml_node!(second_node, LexedXmlNode::Attribute { key, value } => {
             assert_eq!(key, "foo");
@@ -624,6 +626,28 @@ mod tests {
             assert_eq!(name, "data");
             assert!(namespace.is_none(), "Namespace should be empty")
         });
+
+        Ok(())
+    }
+
+    #[test]
+    fn when_parse_multiple_attribute_name_and_value_then_succeed() -> Result<()> {
+        let data = "<data foo=\"bar\" baz=\"qux\" />";
+        let mut parser = KbXmlParser::new();
+        let doc = parser.parse(data)?;
+
+        assert_eq!(doc.len(), 4, "Expected document to have 3 nodes: {doc:?}");
+        
+        let expected_doc = LexedXmlDocument::from_nodes(
+            vec![
+                LexedXmlNode::TagOpen { name: "data".to_string(), namespace: None },
+                LexedXmlNode::Attribute { key: "foo".to_string(), value: Some("bar".to_string()) },
+                LexedXmlNode::Attribute { key: "baz".to_string(), value: Some("qux".to_string()) },
+                LexedXmlNode::TagClose { name: String::new(), namespace: None },
+            ]
+        );
+        
+        assert_eq!(doc, expected_doc);
 
         Ok(())
     }

@@ -1,5 +1,5 @@
 // TODO: support attributes
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum LexedXmlNode {
     TagOpen { name: String, namespace: Option<String>, },
     TagClose { name: String, namespace: Option<String> },

@@ -87,7 +87,9 @@ impl TryFrom<LexedXmlDocument> for XmlDocument {
                 LexedXmlNode::TagClose { name, namespace } => {
                     let closed = stack.pop().ok_or_else(|| ParseError::UnmatchedCloseTag(name.clone()))?;
 
-                    if closed.name() != &name || closed.namespace() != namespace.as_ref() {
+                    let names_mismatch = closed.name() != &name || closed.namespace() != namespace.as_ref();
+                    let is_empty = name.is_empty() && namespace.is_none();
+                    if names_mismatch && !is_empty {
                         return Err(ParseError::TagMismatch {
                             expected: (closed.name().clone(), closed.namespace().cloned()),
                             found: (name, namespace),
@@ -205,6 +207,29 @@ mod tests {
         }
         
         
+        Ok(())
+    }
+
+    #[test]
+    fn when_parse_multiple_attribute_name_and_value_then_succeed() -> Result<()> {
+        let mut doc = XmlDocument::parse("<data foo=\"bar\" baz=\"qux\" />")?;
+
+        let root = doc.root_mut()
+            .expect("Root is valid")
+            .as_element_mut()
+            .expect("Root is element");
+
+        let attributes = root.attributes_mut();
+        assert_eq!(attributes.len(), 2);
+
+        let first_attribute = attributes.get("foo");
+        assert!(first_attribute.is_some(), "Foo attribute was not parsed");
+        assert_eq!(first_attribute.expect("Foo attribute parsed"), "bar");
+
+        let second_attribute = attributes.get("baz");
+        assert!(second_attribute.is_some(), "Baz attribute was not parsed");
+        assert_eq!(second_attribute.expect("Baz attribute parsed"), "qux");
+
         Ok(())
     }
     

@@ -23,24 +23,38 @@ pub struct XmlAttribute<'a> {
 
 impl XmlNode {
     pub fn new_element(
-        name: String,
+        name: impl Into<String>,
         namespace: Option<String>,
         attributes: HashMap<String, String>,
         children: Vec<XmlNode>,
     ) -> Self {
-        Self::Element(XmlElement::new(name, namespace, attributes, children))
+        Self::Element(XmlElement::new(name.into(), namespace, attributes, children))
     }
 
-    pub fn new_text(text: String) -> Self {
-        Self::Text(text)
+    pub fn new_text(text: impl Into<String>) -> Self {
+        Self::Text(text.into())
     }
 
-    pub fn new_comment(comment: String) -> Self {
-        Self::Comment(comment)
+    pub fn new_comment(comment: impl Into<String>) -> Self {
+        Self::Comment(comment.into())
     }
 
-    pub fn new_cdata(data: String) -> Self {
-        Self::CData(data)
+    pub fn new_cdata(data: impl Into<String>) -> Self {
+        Self::CData(data.into())
+    }
+    
+    pub fn as_element(&self) -> Option<&XmlElement> {
+        match self {
+            XmlNode::Element(element) => Some(element),
+            _ => None,
+        }
+    }
+    
+    pub fn as_element_mut(&mut self) -> Option<&mut XmlElement> {
+        match self {
+            XmlNode::Element(element) => Some(element),
+            _ => None,
+        }
     }
 }
 
@@ -68,6 +82,14 @@ impl XmlElement {
         self.namespace.as_ref()
     }
 
+    pub fn attributes(&self) -> &HashMap<String, String> {
+        &self.attributes
+    }
+    
+    pub fn attributes_mut(&mut self) -> &mut HashMap<String, String> {
+        &mut self.attributes
+    }
+    
     pub fn attr<'a>(&'a self, key: &'a str) -> Option<XmlAttribute<'a>> {
         if self.attributes.contains_key(key) {
             let attr = self.attributes.get(key).unwrap();
@@ -152,4 +174,26 @@ impl <'a> XmlAttribute<'a> {
     pub fn value(&self) -> &'a str {
         self.value
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use crate::node::XmlNode;
+
+    #[test]
+    fn when_as_element_with_element_node_then_succeed() {
+        let node = XmlNode::new_element("foo".to_string(), None, HashMap::new(), Vec::new());
+        let element = node.as_element();
+        assert!(element.is_some());
+        assert_eq!(element.expect("Node is element").name(), "foo");
+    }
+    
+    #[test]
+    fn when_as_element_with_non_element_node_then_returns_none() {
+        let node = XmlNode::new_text("foo");
+        let element = node.as_element();
+        assert!(element.is_none());
+    }
+    
 }
